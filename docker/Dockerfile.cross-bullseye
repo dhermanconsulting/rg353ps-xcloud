@@ -1,0 +1,57 @@
+# Fast build image: a REAL cross-compiler, amd64 host producing aarch64.
+#
+# The other image (Dockerfile.arm64-bullseye) is an arm64 container running
+# under QEMU on an amd64 host, so every instruction is translated and a build
+# costs roughly 20x what it should. This one runs the compiler natively and
+# only the OUTPUT is aarch64. Same Debian release, so the ABI story is
+# identical: bullseye ships glibc 2.31, below the device's 2.32, and the hard
+# cliff is 2.34 where __libc_start_main moved into libc.so.6.
+#
+# Two architectures live here at once:
+#   - amd64 supplies the toolchain (gcc, binutils, cmake) and runs it.
+#   - arm64 supplies the target -dev packages: headers, and the .so symlinks
+#     the linker resolves against. Nothing arm64 is ever EXECUTED, so no
+#     binfmt registration is needed and this image works even after the
+#     Docker VM restarts and drops the arm64 handler.
+#
+# Sources stay on deb.debian.org, matching the arm64 image. archive.debian.org
+# looks like the "correct" home for a post-LTS release but its
+# debian-security/bullseye-security Release file 404s, which fails the build.
+#
+# One entry lists BOTH architectures rather than a pair of arch-pinned lines:
+# two lines pointing at the same suite make apt fetch main/binary-all twice and
+# warn about it on every apt call.
+FROM --platform=linux/amd64 debian:bullseye
+
+RUN printf 'deb [arch=amd64,arm64] http://deb.debian.org/debian bullseye main\n\
+deb [arch=amd64,arm64] http://deb.debian.org/debian-security bullseye-security main\n\
+deb [arch=amd64,arm64] http://deb.debian.org/debian bullseye-updates main\n' \
+      > /etc/apt/sources.list \
+ && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid-until \
+ && dpkg --add-architecture arm64 \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      crossbuild-essential-arm64 pkg-config cmake ninja-build git \
+      ca-certificates curl python3 file patchelf xz-utils \
+ && apt-get install -y --no-install-recommends \
+      libdrm-dev:arm64 libasound2-dev:arm64 libopus-dev:arm64 \
+      libfreetype6-dev:arm64 libcurl4-openssl-dev:arm64 libssl-dev:arm64 \
+      libavcodec-dev:arm64 libavformat-dev:arm64 libavutil-dev:arm64 \
+      libswscale-dev:arm64 \
+ && rm -rf /var/lib/apt/lists/*
+
+# Cross pkg-config. PKG_CONFIG_LIBDIR (not _PATH) REPLACES the search path, so
+# the amd64 .pc files can never be picked up by mistake -- which would hand the
+# compiler host include paths and link flags that silently produce an
+# unbuildable or, worse, subtly wrong binary.
+ENV PKG_CONFIG_LIBDIR=/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/share/pkgconfig \
+    PKG_CONFIG_SYSROOT_DIR= \
+    CC=aarch64-linux-gnu-gcc \
+    CXX=aarch64-linux-gnu-g++ \
+    AR=aarch64-linux-gnu-ar \
+    RANLIB=aarch64-linux-gnu-ranlib \
+    STRIP=aarch64-linux-gnu-strip \
+    OBJDUMP=aarch64-linux-gnu-objdump \
+    READELF=aarch64-linux-gnu-readelf
+
+WORKDIR /src

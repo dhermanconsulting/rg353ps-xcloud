@@ -1,0 +1,38 @@
+# Store every file byte-for-byte. No line-ending translation, in either
+# direction, ever.
+#
+# This is deliberate and it matters more here than in most repos:
+#
+#   - scripts/*.sh and deps/build-deps.sh are executed by `sh` INSIDE Linux
+#     build containers, through a bind mount of this working tree. If git
+#     ever checked them out with CRLF, every one of them would fail with
+#     something unhelpful like "\r: not found". They are LF today; -text keeps
+#     them that way on any machine, whatever the user's core.autocrlf says.
+#
+#   - third_party/libpeer/third_party/libsrtp ships CRLF from upstream. Left
+#     alone, our vendored copy stays byte-identical to the commit recorded in
+#     third_party/PROVENANCE.md, so `diff` against a fresh upstream checkout
+#     shows real changes and not four thousand line-ending differences. That
+#     property is the whole reason the provenance files exist.
+#
+# The cost is that git will not fix a file someone commits with the wrong
+# endings. That is the right trade: silent rewriting is what breaks builds
+# here, and a wrong-endings file is visible in review.
+* -text
+
+# Belt and braces for things that must never be treated as text even if the
+# rule above is ever relaxed.
+*.xcau   binary
+*.png    binary
+*.jpg    binary
+*.mp4    binary
+*.a      binary
+*.so     binary
+*.ttf    binary
+
+# Keep GitHub's language statistics honest. Without this, third_party/ (14 MB
+# of mbedTLS, libsrtp and usrsctp) swamps the ~18k lines actually written
+# here, and the repository is reported as somebody else's project.
+third_party/**    linguist-vendored
+deps/patches/**   linguist-vendored
+docs/**           linguist-documentation

@@ -1,0 +1,111 @@
+name: Release
+
+# Tag a version and this publishes the download people actually install:
+#
+#   git tag -a v1.0.0 -m "..."  &&  git push origin v1.0.0
+#
+# The binary is deliberately NOT committed to the repository. It is 31 MB, it
+# changes on every build, and git keeps every version of it for ever -- so
+# committing it would make the repository grow without bound and make every
+# clone pay for builds nobody wants. Release assets are the right place:
+# they do not count towards repository size, and it is where people look.
+#
+# Can also be run by hand from the Actions tab to rehearse the build without
+# publishing anything.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write        # needed to create the release and upload the asset
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The version string comes from `git describe`, which needs the tags
+          # and enough history to find the nearest one. A shallow checkout
+          # would silently produce a binary reporting a bare commit hash.
+          fetch-depth: 0
+
+      - name: Cache the WebRTC stack
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: deps/rg353
+          key: deps-rg353-${{ hashFiles('deps/build-deps.sh', 'third_party/**/CMakeLists.txt', 'third_party/libpeer/src/**', 'third_party/libpeer/include/**') }}
+
+      - name: Set up QEMU for arm64
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build the client
+        run: sh scripts/bootstrap.sh
+
+      # A release must never ship something the bench has not seen. This is
+      # the same suite CI runs on every pull request.
+      - name: Test bench
+        run: sh scripts/bootstrap.sh --host-only && sh scripts/test.sh -quick
+
+      - name: Build the release archive
+        id: package
+        run: |
+          sh scripts/package.sh
+          zip=$(ls out/*.zip | head -1)
+          echo "zip=$zip" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$zip")" >> "$GITHUB_OUTPUT"
+          # A tagged build must correspond to a commit. package.sh only warns,
+          # because packaging a work in progress is normal; here it is not.
+          case "$zip" in
+            *-dirty*) echo "::error::the tree is dirty; a release must match a commit"; exit 1 ;;
+          esac
+
+      - name: Checksum
+        run: |
+          cd out && sha256sum *.zip | tee SHA256SUMS.txt
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.package.outputs.zip }}
+            out/SHA256SUMS.txt
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **The easy way, no terminal needed.** Download
+            `${{ steps.package.outputs.name }}` below and unzip it. Take the SD
+            card holding your ROMs out of the handheld, put it in your
+            computer, and copy the `ports` folder from the archive into the
+            card's root so it merges with the `ports` folder already there.
+            Put the card back. It appears under **Ports**.
+
+            Full instructions are in `INSTALL.txt` inside the archive, and in
+            [docs/INSTALL.md](docs/INSTALL.md).
+
+            **You will need** Xbox Game Pass Ultimate for cloud streaming, or
+            your own Xbox on the same network for remote play. Sign in happens
+            on the handheld, once.
+
+            ---
+
+            Verify the download against `SHA256SUMS.txt`.
+
+            GPL-3.0. Not affiliated with Microsoft or Anbernic.
+
+      - name: Archive (manual runs, which publish nothing)
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-archive
+          path: out/*.zip
+          retention-days: 7

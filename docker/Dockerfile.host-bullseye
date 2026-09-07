@@ -1,0 +1,57 @@
+# Host simulator image: native amd64 Debian bullseye.
+#
+# The same Debian release as the two device images, so the FFmpeg (4.3.x),
+# glibc (2.31), gcc (10.2.1) and FreeType the client is written against are
+# identical -- only the CPU differs. The binary this builds, out/host/xcloud
+# via scripts/build-host.sh, RUNS HERE with no hardware at all:
+#
+#   - src/video/drm_output_sim.c stands in for the VOP2 overlay plane, with
+#     a simulated 60.3 Hz vblank and optional PNG screenshots;
+#   - ALSA's "null" device stands in for the RK817 codec (scripts/sim.sh sets
+#     XCLOUD_ALSA_DEVICE=null);
+#   - there is no gamepad, so the UI paints but does not respond.
+#
+# It exists so the decode thread, presenter and audio player can be run
+# against a recording (scripts/sim.sh -replay ...) and the UI screens can be
+# looked at, without the handheld. Nothing built here ever goes to the device.
+#
+# Sources stay on deb.debian.org: archive.debian.org looks like the correct
+# home for a post-LTS release but its debian-security/bullseye-security
+# Release file 404s (checked again 2026-09-05; see Dockerfile.cross-bullseye).
+# The security line cannot simply be dropped either: the debian:bullseye base
+# image already carries security's libc6 and perl-base, and main's libc6-dev
+# and perl then fail to resolve.
+#
+# Security comes from a pinned snapshot.debian.org, unlike the device images
+# (the fallback Dockerfile.arm64-bullseye names, same timestamp). Measured
+# 2026-09-05, four builds: the Fastly CDN behind deb.debian.org and
+# security.debian.org 404s a different security pool file on each edge --
+# xz-utils 5.2.5-2.1~deb11u2 (requested as %7e) on one, glib and gdk-pixbuf
+# (+deb11u8, %2b) on another -- while curl by hand, or a different edge,
+# serves the same files fine. The snapshot serves every one of them and
+# carries exactly the libc6/perl-base versions the base image already has.
+# Snapshot throttles, hence Acquire::Retries.
+#
+# fonts-dejavu-core lands at /usr/share/fonts/truetype/dejavu/, not the
+# device's /usr/share/fonts/dejavu/; src/ui/text.c falls back to it. zlib is
+# for the simulator's PNG writer; libdrm-dev only so the host build can use
+# the same pkg-config line as the device build.
+#
+#   docker build --load -f docker/Dockerfile.host-bullseye -t xcloud-host .
+FROM --platform=linux/amd64 debian:bullseye
+
+RUN printf 'deb http://deb.debian.org/debian bullseye main\n\
+deb http://snapshot.debian.org/archive/debian-security/20260824T000000Z bullseye-security main\n\
+deb http://deb.debian.org/debian bullseye-updates main\n' \
+      > /etc/apt/sources.list \
+ && printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "5";\n' \
+      > /etc/apt/apt.conf.d/99no-check-valid-until \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential pkg-config cmake git ca-certificates curl python3 file \
+      libavcodec-dev libavformat-dev libavutil-dev libasound2-dev \
+      libfreetype6-dev libcurl4-openssl-dev libdrm-dev zlib1g-dev \
+      fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src

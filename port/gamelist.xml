@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<!--
+  Our entry for EmulationStation's Ports list, as a standalone gamelist.
+
+  This file is NOT copied to the device as-is. /userdata/roms/ports/gamelist.xml
+  is shared by every port on the handheld (PortMaster's entries, DRM Probe.sh,
+  PlayTest.sh), so overwriting it would silently delete their metadata.
+  scripts/install.sh merges this entry into whatever is already there, with
+  tools/gamelist-merge.py, matching on the path element.
+
+  The path is relative to /userdata/roms/ports and must match the launcher's
+  filename exactly, or ES shows the raw script name instead of any of this.
+
+  It is "Xbox Cloud.sh", space and all, because that is what is already on the
+  device and what EmulationStation has recorded play history against. Renaming
+  it to something tidier would leave a second entry in the Ports list and
+  orphan the playcount and gametime ES has been keeping. Not worth it.
+
+  Note for anyone editing the comment: XML forbids a double hyphen inside a
+  comment, which is why there are none here.
+-->
+<gameList>
+	<game>
+		<path>./Xbox Cloud.sh</path>
+		<name>Xbox Cloud Gaming</name>
+		<desc>Stream Xbox Game Pass titles, or your own Xbox over remote play, natively on the handheld. Software H.264 decode onto a DRM overlay plane at 60 fps, WebRTC over Microsoft's GSSV signalling, raw evdev input and direct ALSA. Sign in on the device; SELECT+X opens options mid-stream, SELECT+START quits.</desc>
+		<genre>Streaming</genre>
+		<players>1</players>
+		<lang>en</lang>
+	</game>
+</gameList>

@@ -1,0 +1,39 @@
+# Primary build image: emulated arm64 Debian bullseye.
+#
+# Why bullseye: the RG353 runs glibc 2.32. Binaries built against glibc >= 2.34
+# fail to start with "version GLIBC_2.34 not found", because __libc_start_main
+# moved into libc.so.6 at 2.34 and the reference comes from crt1.o. Bullseye
+# ships glibc 2.31, which is below 2.32 and therefore safe.
+#
+# Bullseye's FFmpeg is 4.3.x, which matches the device's libavutil.so.56.51.100
+# and libavcodec.so.58.91.100 exactly, so we can build against these headers
+# and link dynamically against the device's own libraries at runtime.
+#
+# Bullseye left LTS on 2026-08-31 and is mid-transition to archive.debian.org:
+# deb.debian.org still serves the indexes but some pool files already 404. If
+# more packages start failing, switch to the pinned snapshot the base image
+# ships commented out:
+#   deb http://snapshot.debian.org/archive/debian/20260824T000000Z bullseye main
+#   deb http://snapshot.debian.org/archive/debian-security/20260824T000000Z bullseye-security main
+#
+# Deliberately NO libsdl2-dev: it drags in libgl1-mesa-dev, which currently
+# 404s, and we do not need it. The design uses direct libdrm for video, raw
+# evdev for input and ALSA for audio, so SDL is not a dependency at all.
+# Also no nasm/yasm: they are x86 assemblers, useless for an aarch64 target.
+#
+# NOTE: arm64 emulation must be registered before this image can run. That
+# registration lives in the Docker/WSL2 VM kernel and is LOST whenever that VM
+# restarts, showing up as "exec /bin/sh: exec format error". Re-run:
+#   docker run --privileged --rm tonistiigi/binfmt --install arm64
+FROM --platform=linux/arm64 debian:bullseye
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      build-essential pkg-config cmake ninja-build git ca-certificates curl \
+      python3 file patchelf \
+      libdrm-dev libasound2-dev libopus-dev libfreetype6-dev \
+      libcurl4-openssl-dev libssl-dev \
+      libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src

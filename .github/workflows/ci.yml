@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Cheap and fast, so it fails a bad PR in under a minute rather than after
+  # the twenty it takes to build a WebRTC stack under emulation.
+  lint:
+    name: Lint and hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No private details in the tree
+        run: sh scripts/check-clean.sh
+
+      - name: Shell scripts parse
+        run: |
+          rc=0
+          for f in scripts/*.sh deps/*.sh port/*.sh; do
+            sh -n "$f" || { echo "::error file=$f::does not parse"; rc=1; }
+          done
+          exit $rc
+
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          # SC1091: sourced files are resolved at run time, not lint time.
+          # SC2086: several call sites word-split caller-supplied options on
+          #         purpose; those are annotated individually.
+          severity: warning
+          ignore_paths: third_party reference
+        env:
+          SHELLCHECK_OPTS: -e SC1091
+
+  device:
+    name: Device build (aarch64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The WebRTC stack is the expensive part and changes only when the
+      # vendored sources or the build script do, so it is keyed on exactly
+      # those. A hit turns a ~20 minute job into a ~2 minute one.
+      - name: Cache the WebRTC stack
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: deps/rg353
+          key: deps-rg353-${{ hashFiles('deps/build-deps.sh', 'third_party/**/CMakeLists.txt', 'third_party/libpeer/src/**', 'third_party/libpeer/include/**') }}
+
+      - name: Set up QEMU for arm64
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Build
+        run: sh scripts/bootstrap.sh
+
+      # bootstrap.sh already runs this, but assert it independently: a binary
+      # that references a newer glibc will not start on the stock firmware,
+      # and that is the single most expensive mistake to ship.
+      - name: ABI check
+        run: sh scripts/check-abi.sh out/xcloud
+
+      - name: Warning-free build
+        run: |
+          sh scripts/build-app.sh -B 2>&1 | tee build.log
+          if grep -q 'warning:' build.log; then
+            grep 'warning:' build.log
+            echo "::error::the device build must be warning-free"
+            exit 1
+          fi
+
+      # The only place the NEON downscale kernels are executed. Strict, so a
+      # missing arm64 image fails rather than quietly testing the scalar path
+      # twice. bootstrap.sh builds that image whenever the deps cache misses;
+      # on a cache hit this step builds it, which is the cost of actually
+      # checking the intrinsics on every run.
+      - name: Downscale kernels, NEON under QEMU
+        env:
+          NV12CHECK_STRICT: "1"
+        run: |
+          docker image inspect xcloud-arm64:latest >/dev/null 2>&1 || {
+            docker run --privileged --rm tonistiigi/binfmt --install arm64
+            docker build --load -f docker/Dockerfile.arm64-bullseye -t xcloud-arm64 .
+          }
+          sh scripts/nv12check.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xcloud-aarch64
+          path: out/xcloud
+          retention-days: 14
+
+  host:
+    name: Host simulator and test bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the host WebRTC stack
+        uses: actions/cache@v4
+        with:
+          path: deps/host
+          key: deps-host-${{ hashFiles('deps/build-deps.sh', 'third_party/**/CMakeLists.txt', 'third_party/libpeer/src/**', 'third_party/libpeer/include/**') }}
+
+      - name: Build the simulator
+        run: sh scripts/bootstrap.sh --host-only
+
+      - name: Warning-free build
+        run: |
+          sh scripts/build-host.sh -B 2>&1 | tee build-host.log
+          if grep -q 'warning:' build-host.log; then
+            grep 'warning:' build-host.log
+            echo "::error::the host build must be warning-free"
+            exit 1
+          fi
+
+      # -quick skips the two builds, which the steps above already did.
+      # The bench replays a synthetic capture through the whole pipeline
+      # against pass/fail thresholds and exits non-zero on any FAIL.
+      - name: Test bench
+        run: sh scripts/test.sh -quick
+
+      # Scalar half only: the NEON half needs the emulated arm64 image, which
+      # this job does not build. The script says so loudly rather than
+      # reporting a pass it did not earn. The device job runs it strictly.
+      - name: Downscale kernels, scalar reference
+        run: sh scripts/nv12check.sh
+
+      - name: Logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: out/host/test/
+          retention-days: 7
+          if-no-files-found: ignore
