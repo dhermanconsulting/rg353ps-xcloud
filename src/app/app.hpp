@@ -223,8 +223,8 @@ bool sign_in(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth);
 
 /* ---- presenter (present.cpp) ------------------------------------------- */
 
-gnx::xcloud::GamepadFrame pad_to_frame(const pad &p);
-gnx::xcloud::GamepadFrame autoplay_frame(gnx::xcloud::GamepadFrame f);
+gnx::stream::PadFrame pad_to_frame(const pad &p);
+gnx::stream::PadFrame autoplay_frame(gnx::stream::PadFrame f);
 bool quit_combo(const pad &p);
 double now_ms();
 
