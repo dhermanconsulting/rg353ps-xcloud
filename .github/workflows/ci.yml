@@ -89,10 +89,17 @@ jobs:
       # twice. bootstrap.sh builds that image whenever the deps cache misses;
       # on a cache hit this step builds it, which is the cost of actually
       # checking the intrinsics on every run.
+      #
+      # nv12check.sh runs the scalar reference in the host image first, and
+      # this job has no other reason to own one -- a development machine has
+      # all three images, a runner starts with none. Native amd64, so it is
+      # the cheap one to build.
       - name: Downscale kernels, NEON under QEMU
         env:
           NV12CHECK_STRICT: "1"
         run: |
+          docker image inspect xcloud-host:latest >/dev/null 2>&1 || \
+            docker build --load -f docker/Dockerfile.host-bullseye -t xcloud-host .
           docker image inspect xcloud-arm64:latest >/dev/null 2>&1 || {
             docker run --privileged --rm tonistiigi/binfmt --install arm64
             docker build --load -f docker/Dockerfile.arm64-bullseye -t xcloud-arm64 .
