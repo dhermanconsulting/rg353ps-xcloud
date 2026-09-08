@@ -84,16 +84,42 @@ const char *const kTabName[TAB_COUNT] = { "Home", "All Games", "Genres",
  * The Tools tab: things that measure the device rather than change it, which
  * is why they are not settings. Each is a row that opens a screen of its own.
  */
-enum Tool { TOOL_BUTTONS, TOOL_NETWORK, TOOL_ABOUT, TOOL_COUNT };
+/*
+ * The three that throw something away sit at the BOTTOM, below About, so
+ * that scrolling down the list never lands on one by momentum. Each asks
+ * first, and each says exactly what it is about to delete.
+ */
+enum Tool { TOOL_BUTTONS, TOOL_NETWORK, TOOL_ABOUT, TOOL_LOGOUT, TOOL_RESET,
+	    TOOL_RESET_LOGOUT, TOOL_COUNT };
 
 const char *const kToolName[TOOL_COUNT] = { "Button tester",
 					    "Network test",
-					    "About" };
+					    "About",
+					    "Log out",
+					    "Reset app",
+					    "Reset and log out" };
 const char *const kToolHelp[TOOL_COUNT] = {
 	"Check what each button on this device really reports",
 	"Measure the link to the streaming service",
 	"Who wrote this, and which build it is",
+	"Forget this Xbox account and pair again with a new code",
+	"Clear the library cache and settings, but stay signed in",
+	"Everything, as though it had just been installed",
 };
+
+/*
+ * What lives in the state directory, and which of the two things a wipe can
+ * throw away it belongs to. `art` is the thumbnail directory rather than a
+ * file; everything else is a plain unlink.
+ *
+ * Listed here rather than hunted for at run time so that adding a cache
+ * somewhere else in the client and forgetting it here is a visible omission
+ * in one place, not a file that quietly survives a reset for ever.
+ */
+const char *const kAuthFiles[]  = { "tokens.json" };
+const char *const kCacheFiles[] = { "catalog.json", "names.json",
+				    "recent.json", "native.json",
+				    "options.json" };
 
 /*
  * Which horizontal band the D-pad is talking to.
@@ -738,6 +764,8 @@ private:
 	void draw_pad_graphic(Painter &pt);
 	void run_network_test();
 	void show_about();
+	bool confirm(const char *title, const char *goes, const char *stays);
+	void wipe(bool auth, bool caches);
 	void show_info(const gnx::Game &g);
 
 	/* ---- input ---- */
@@ -1387,6 +1415,111 @@ int wifi_dbm()
 
 }  // namespace
 
+/*
+ * "Are you sure", for the three tools that delete something.
+ *
+ * Defaults to cancelling in the sense that matters: nothing happens until A
+ * is pressed, B is offered first in the hint, and the panel spells out what
+ * goes and what stays rather than saying "this cannot be undone" and leaving
+ * the reader to guess the scope.
+ */
+bool LibraryScreen::confirm(const char *title, const char *goes,
+			    const char *stays)
+{
+	for (int b = 0; b < PAD_COUNT; b++)
+		pad_take_press(&p_, (enum pad_button)b);
+
+	while (!g_stop && !pad_script_done(&p_)) {
+		Painter pt(out_, f_);
+		char buf[96];
+
+		pt.rect(0, 0, kWidth, kHeaderH, 40);
+		pt.line(f_.big, 18, 37, title, 235);
+
+		pt.line(f_.mid, 24, 110, "This will:", 150);
+		pt.line_fit(f_.mid, 24, 146, goes, 240, kWidth - 48);
+		if (stays) {
+			pt.line(f_.mid, 24, 200, "This will not:", 150);
+			pt.line_fit(f_.mid, 24, 236, stays, 200, kWidth - 48);
+		}
+		pt.line_fit(f_.small, 24, 300,
+			    "The app closes afterwards; open it again from "
+			    "Ports.", 150, kWidth - 48);
+
+		pt.rect(0, kListBottom, kWidth, kFooterH, 28);
+		std::snprintf(buf, sizeof(buf), "%s Cancel      %s Go ahead",
+			      pad_button_label(&p_, PAD_B),
+			      pad_button_label(&p_, PAD_A));
+		pt.centred(f_.small, kHeight - 8, buf, 170);
+		pt.present();
+
+		pad_poll(&p_, 16);
+		if (pad_take_press(&p_, PAD_B))
+			return false;
+		if (pad_take_press(&p_, PAD_A))
+			return true;
+	}
+	return false;
+}
+
+/*
+ * Delete the chosen halves of the state directory, then stop the client.
+ *
+ * Stopping is not tidiness: the catalogue, the thumbnails and the auth token
+ * are all held in memory by objects that outlive this call, so carrying on
+ * would mean running against state that has just been deleted underneath --
+ * and, after a log out, still holding the token that was supposedly
+ * forgotten. A clean exit makes the next launch the reset one.
+ */
+void LibraryScreen::wipe(bool auth, bool caches)
+{
+	const std::string dir = g_opts.state_dir;
+	int gone = 0;
+
+	if (auth)
+		for (const char *f : kAuthFiles)
+			gone += std::remove((dir + "/" + f).c_str()) == 0;
+	if (caches) {
+		for (const char *f : kCacheFiles)
+			gone += std::remove((dir + "/" + f).c_str()) == 0;
+		/* The art cache is a directory of files named by product id;
+		 * empty it rather than removing the directory, which the
+		 * thumbnail worker expects to exist. */
+		const std::string art = dir + "/art";
+		if (DIR *d = opendir(art.c_str())) {
+			while (struct dirent *e = readdir(d)) {
+				if (e->d_name[0] == '.')
+					continue;
+				gone += std::remove((art + "/" + e->d_name)
+							    .c_str()) == 0;
+			}
+			closedir(d);
+		}
+	}
+	std::fprintf(stderr, "tools: wiped %d file%s from %s (auth=%d "
+			     "caches=%d)\n",
+		     gone, gone == 1 ? "" : "s", dir.c_str(), auth, caches);
+
+	/* Say what happened before going: a screen that vanishes on a button
+	 * press is indistinguishable from a crash. */
+	const int until = pad_now_ms() + 1400;
+	while (!g_stop && pad_now_ms() < until) {
+		Painter pt(out_, f_);
+		char buf[96];
+
+		pt.rect(0, 0, kWidth, kHeaderH, 40);
+		pt.line(f_.big, 18, 37, "Done", 235);
+		std::snprintf(buf, sizeof(buf), "%d file%s removed", gone,
+			      gone == 1 ? "" : "s");
+		pt.centred(f_.mid, 200, buf, 235);
+		pt.centred(f_.small, 240, "Closing. Open it again from Ports.",
+			   165);
+		pt.present();
+		pad_poll(&p_, 30);
+	}
+	g_stop = 1;
+}
+
 /* Who wrote it and which build this is. The build line is the same string
  * the footer carries; it is here too because this is where someone looks. */
 void LibraryScreen::show_about()
@@ -1662,12 +1795,36 @@ void LibraryScreen::launch()
 	/* A tool opens its own screen and comes back here when it is done. */
 	if (sel_ >= 0 && sel_ < (int)m_.rows.size() &&
 	    m_.rows[sel_].kind == ROW_TOOL) {
-		if (m_.rows[sel_].game == TOOL_BUTTONS)
+		switch (m_.rows[sel_].game) {
+		case TOOL_BUTTONS:
 			run_button_tester();
-		else if (m_.rows[sel_].game == TOOL_NETWORK)
+			break;
+		case TOOL_NETWORK:
 			run_network_test();
-		else
+			break;
+		case TOOL_ABOUT:
 			show_about();
+			break;
+		case TOOL_LOGOUT:
+			if (confirm("Log out",
+				    "Forget the Xbox account signed in here",
+				    "Touch your library cache or settings"))
+				wipe(true, false);
+			break;
+		case TOOL_RESET:
+			if (confirm("Reset app",
+				    "Clear the library cache, box art and "
+				    "settings",
+				    "Sign you out -- you stay paired"))
+				wipe(false, true);
+			break;
+		case TOOL_RESET_LOGOUT:
+			if (confirm("Reset and log out",
+				    "Clear everything: account, cache, box "
+				    "art and settings", nullptr))
+				wipe(true, true);
+			break;
+		}
 		/* The tool owned the pad: drop any edge it left behind so
 		 * releasing its exit combo does not act on this list. */
 		for (int b = 0; b < PAD_COUNT; b++)

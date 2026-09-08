@@ -105,11 +105,23 @@ R2** page up and down through a long list. On a title, **X** opens an info
 panel; on a genre, **Right** steps into it. A title too long for its row
 scrolls once you have rested on it for a second.
 
-**Tools** holds two things. *Button tester* draws a controller and lights up
-whatever you press, alongside the raw code your device reported — useful if
-the face buttons feel wrong; hold **B** to leave it. *Network test* measures
-latency and jitter to Xbox Live, download and upload speed, and your Wi-Fi
-signal, then tells you whether the link will carry 720p or 720p high.
+**Tools** holds a few things. *Button tester* draws a controller and lights
+up whatever you press, alongside the raw code your device reported — useful
+if the face buttons feel wrong; hold **B** to leave it. *Network test*
+measures latency and jitter to Xbox Live, download and upload speed, and your
+Wi-Fi signal, then tells you whether the link will carry 720p or 720p high.
+*About* names the build, which is worth checking before reporting anything.
+
+At the bottom, below About, are three that throw something away. Each asks
+first and says exactly what goes and what stays:
+
+| | |
+|---|---|
+| **Log out** | Forgets your Xbox account. Next launch shows a new code to pair with. Your cache and settings are untouched. |
+| **Reset app** | Clears the library cache, box art and settings. You stay signed in. |
+| **Reset and log out** | Both, so it starts as though freshly installed. |
+
+The app closes after any of them; open it again from **Ports**.
 
 Everything worth changing is in the on-device settings — stream quality,
 face-button layout, picture mode, console language, Wi-Fi tuning. You do not

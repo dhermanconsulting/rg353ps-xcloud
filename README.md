@@ -32,7 +32,7 @@ about 8 MB.
 |---|---|
 | **Sign in** | Microsoft device-code flow, on the handheld. Token cached locally. |
 | **Library** | Your Game Pass catalog with box art, search, sort, recently played, and an info panel per title. |
-| **Tools** | A button tester drawn as a controller, showing the raw code each button reports and what it maps to; and a network test — latency and jitter to Xbox Live, download and upload, Wi-Fi signal — that says which stream quality your link will hold. |
+| **Tools** | A button tester drawn as a controller, showing the raw code each button reports and what it maps to; a network test — latency and jitter to Xbox Live, download and upload, Wi-Fi signal — that says which stream quality your link will hold; and log out / reset, each behind a confirmation that names what it deletes. |
 | **Streaming** | 60 fps at 720p with sound, over WebRTC. |
 | **Remote play** | Your own Xbox instead of the cloud — lower latency, and not metered against Game Pass hours. Cold consoles are woken automatically. |
 | **Input** | Raw evdev gamepad, configurable face-button layout. |
