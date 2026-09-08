@@ -43,6 +43,7 @@
 #include "../media/au_recorder.hpp"
 #include "../media/audio_player.hpp"
 #include "../media/video_jitter.hpp"
+#include "stream_engine.hpp"
 
 extern "C" {
 #include <peer_connection.h>
@@ -50,15 +51,9 @@ extern "C" {
 
 namespace gnx::stream {
 
-enum class EngineState {
-	Idle,
-	StartingSession,  // REST: create session, wait for provisioning
-	Negotiating,      // SDP/ICE exchange + DTLS
-	WaitingForVideo,  // connected, waiting for the first frame
-	Streaming,
-	Failed,
-	Stopped,
-};
+/* EngineState and the Counters struct are IStreamEngine's; see
+ * stream_engine.hpp. They moved there because the session loop reads them
+ * and the session loop no longer knows what a GSSV session is. */
 
 /*
  * Which GSSV offering the session is created against.
@@ -78,10 +73,10 @@ enum class StreamTarget {
 	Console,
 };
 
-class Engine {
+class Engine : public IStreamEngine {
 public:
 	explicit Engine(XboxAuth &auth);
-	~Engine();
+	~Engine() override;
 
 	// Releases the process-wide WebRTC state (libsrtp, usrsctp and its two
 	// service threads) that the first Engine brings up. Call once at exit,
@@ -92,28 +87,29 @@ public:
 	// is Console.
 	void start(StreamTarget target, const std::string &id, QualityTier tier,
 		   const std::string &locale = "en-GB");
-	void stop();
+	void stop() override;
 
-	EngineState state() const { return state_; }
-	std::string status() const;
-	std::string error() const;
+	EngineState state() const override { return state_; }
+	std::string status() const override;
+	std::string error() const override;
 
 	// Decode thread: pops one assembled H.264 access unit (Annex-B, already
 	// keyframe-gated and in decode order) and the millisecond tick at which
 	// its last packet arrived. False when nothing is ready.
-	bool take_access_unit(std::vector<uint8_t> &out, uint64_t *arrival_ms);
+	bool take_access_unit(std::vector<uint8_t> &out,
+			      uint64_t *arrival_ms) override;
 	// Access units waiting for the decoder right now.
-	size_t queued_video() const;
+	size_t queued_video() const override;
 	// Main thread tells the engine a frame reached the screen: arms the
 	// media watchdogs and moves the state to Streaming.
-	void note_decoded_frame();
+	void note_decoded_frame() override;
 
 	// Optional stream recorder (see au_recorder.hpp). Set before start();
 	// the engine does not own it.
 	void set_recorder(AuRecorder *recorder) { recorder_ = recorder; }
 	// Called on the worker each time an access unit is queued, so the
 	// decode thread can wake at once instead of on its idle timeout.
-	void set_video_wakeup(std::function<void()> wakeup);
+	void set_video_wakeup(std::function<void()> wakeup) override;
 	// Whether the worker takes SCHED_FIFO (see worker()). Set before
 	// start(); the client's -nort switch clears it.
 	void set_realtime(bool on) { realtime_ = on; }
@@ -163,19 +159,11 @@ public:
 	// Present thread: publish the pad state and return at once. The worker
 	// sends it (rate limited, idle suppressed), so the vsync-paced present
 	// loop never waits on peer_mutex_ in the window before the flip latches.
-	void set_pad(const xcloud::GamepadFrame &frame);
-	void request_keyframe();
+	void set_pad(const PadFrame &frame) override;
+	void request_keyframe() override;
 
 	// Diagnostics for the on-screen status line.
-	struct Counters {
-		uint32_t pli = 0;
-		uint32_t video_packets = 0;
-		uint64_t video_bytes = 0;
-		uint32_t audio_packets = 0;
-		bool channels_open = false;
-		bool handshake_done = false;
-	};
-	Counters counters() const;
+	Counters counters() const override;
 
 	// What the server says is running, from
 	// /streaming/properties/titleinfo. `state` is kept as the raw string

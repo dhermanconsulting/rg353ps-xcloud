@@ -1,7 +1,16 @@
 /*
- * stream_session(): one live session, from engine start to teardown. The
- * target is either an xCloud title or your own Xbox over remote play; only
- * session setup differs, and that difference lives in the engine.
+ * One live session, from engine start to teardown.
+ *
+ * Split in two at the backend boundary. run_session() is the session itself
+ * -- pipeline, input thread, present pacing, status and error screens -- and
+ * speaks only to IStreamEngine, so a second backend reuses it whole rather
+ * than growing a second copy that then has to be kept in step with this one.
+ * stream_session() is the xCloud half above it: it builds the Engine, applies
+ * the options that only mean anything to GSSV, starts it, and afterwards
+ * records what the session taught us about the title.
+ *
+ * The target is either an xCloud title or your own Xbox over remote play;
+ * only session setup differs, and that difference lives in the engine.
  */
 #include "app.hpp"
 
@@ -10,21 +19,27 @@
 
 namespace app {
 
+/* Both appear all through the loop below, and the qualified names push the
+ * lines they sit on well past the margin at four tabs of indent. */
+using gnx::stream::EngineState;
+using gnx::stream::IStreamEngine;
+
 /*
- * Stream one game. The engine reassembles access units on its worker; the
- * pipeline decodes them on its own thread; this thread presents one frame
- * per refresh and handles the pad in the shadow of the flip.
+ * Drive one already-started session to its end. The engine reassembles
+ * access units on its worker; the pipeline decodes them on its own thread;
+ * this thread presents one frame per refresh and handles the pad in the
+ * shadow of the flip.
+ *
+ * Returns with the engine stopped and the plane back on the UI source.
+ * `title` is only what the connecting screen shows.
  */
-void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
-		    const StreamRequest &request)
+static void run_session(drm_out &out, Fonts &f, pad &p,
+			IStreamEngine &engine,
+			const std::string &title)
 {
-	gnx::stream::Engine engine(auth);
-	gnx::stream::AuRecorder recorder;
 	gnx::stream::VideoPipeline pipe;
 	AsyncLog alog;
 	GovernorGuard governor;
-	struct wifi_tune wifi;
-	bool wifi_applied = false;
 	bool video_mode = false;   /* plane is showing 720p video, not the UI */
 	std::string shown_status;
 	int status_ticks = 0;
@@ -39,33 +54,6 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 	uint32_t prev_packets = 0;
 	double last_plitest = 0;
 
-	const std::string &title =
-		request.name.empty() ? request.id : request.name;
-
-	if (g_opts.record && recorder.open(g_opts.record))
-		engine.set_recorder(&recorder);
-	if (g_opts.wifi_tune)
-		wifi_applied = wifi_tune_apply(&wifi, nullptr) > 0;
-
-	/* 720p is the only tier this device can actually keep up with: the
-	 * panel is 640x480 and software decode of 720p60 is already about a
-	 * third of the SoC. It stays the default for that reason, but the
-	 * tier IS the device fingerprint, which is the one untried lever on
-	 * the coarse-text problem (KNOWN-ISSUES 1), so the options menu can
-	 * change it and find out. */
-	engine.set_realtime(g_opts.realtime);
-	engine.set_requested_video(g_opts.req_w, g_opts.req_h,
-				   g_opts.req_bitrate);
-	if (g_opts.alias)
-		engine.set_alias_override(g_opts.alias);
-	if (g_opts.osname || g_opts.display_w > 0)
-		engine.set_device_override(g_opts.osname ? g_opts.osname : "",
-					   g_opts.display_w, g_opts.display_h);
-	if (g_opts.sdp_max_fs > 0 || g_opts.sdp_max_mbps > 0 || g_opts.sdp_level)
-		engine.set_sdp_caps(g_opts.sdp_max_fs, g_opts.sdp_max_mbps,
-				    g_opts.sdp_level ? g_opts.sdp_level : "");
-	engine.start(request.target, request.id,
-		     (gnx::QualityTier)g_opts.tier, g_opts.locale);
 	engine.set_video_wakeup([&pipe] { pipe.notify(); });
 
 	/*
@@ -98,10 +86,10 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 				options_menu_input(p, pad_now_ms());
 				if (options_menu_open()) {
 					engine.set_pad(
-						gnx::xcloud::GamepadFrame());
+						gnx::stream::PadFrame());
 					continue;
 				}
-				gnx::xcloud::GamepadFrame frame = pad_to_frame(p);
+				gnx::stream::PadFrame frame = pad_to_frame(p);
 				if (g_opts.autoplay)
 					frame = autoplay_frame(frame);
 				engine.set_pad(frame);
@@ -132,9 +120,9 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 	};
 
 	while (!g_stop) {
-		gnx::stream::EngineState state = engine.state();
+		EngineState state = engine.state();
 
-		if (state == gnx::stream::EngineState::Failed) {
+		if (state == EngineState::Failed) {
 			std::string err = engine.error();
 			/* The pad goes back to this thread for the error
 			 * screen; the input thread must be gone first. */
@@ -149,7 +137,7 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 				pad_poll(&p, 200);
 			break;
 		}
-		if (state == gnx::stream::EngineState::Stopped)
+		if (state == EngineState::Stopped)
 			break;
 
 		if (!video_mode) {
@@ -187,15 +175,15 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 			if (status != shown_status || ++status_ticks > 60) {
 				shown_status = status;
 				status_ticks = 0;
-				gnx::stream::Engine::Counters c = engine.counters();
+				IStreamEngine::Counters c = engine.counters();
 				char detail[128];
 				std::snprintf(detail, sizeof(detail),
 					      "channels %s  handshake %s  video %u pkt",
 					      c.channels_open ? "up" : "-",
 					      c.handshake_done ? "ok" : "-",
 					      c.video_packets);
-				draw_status(state == gnx::stream::EngineState::Negotiating ||
-						    state == gnx::stream::EngineState::WaitingForVideo
+				draw_status(state == EngineState::Negotiating ||
+						    state == EngineState::WaitingForVideo
 						    ? detail
 						    : nullptr);
 			}
@@ -244,7 +232,7 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 			 * the number the encoder spends on glyph detail. See
 			 * docs/RESOLUTION.md.
 			 */
-			gnx::stream::Engine::Counters ct = engine.counters();
+			IStreamEngine::Counters ct = engine.counters();
 			double secs = (now - ps.t0) / 1000.0;
 			char netline[128];
 			std::snprintf(netline, sizeof(netline),
@@ -273,6 +261,57 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 		}
 	}
 
+	if (rt_set)
+		set_normal();
+	stop_input();
+	pipe.stop();
+	engine.stop();
+	if (video_mode)
+		drm_out_set_source(&out, kWidth, kHeight);
+}
+
+/*
+ * One xCloud or remote-play session: build the engine, apply the options
+ * that only GSSV understands, hand it to the loop above.
+ */
+void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
+		    const StreamRequest &request)
+{
+	gnx::stream::Engine engine(auth);
+	gnx::stream::AuRecorder recorder;
+	struct wifi_tune wifi;
+	bool wifi_applied = false;
+
+	const std::string &title =
+		request.name.empty() ? request.id : request.name;
+
+	if (g_opts.record && recorder.open(g_opts.record))
+		engine.set_recorder(&recorder);
+	if (g_opts.wifi_tune)
+		wifi_applied = wifi_tune_apply(&wifi, nullptr) > 0;
+
+	/* 720p is the only tier this device can actually keep up with: the
+	 * panel is 640x480 and software decode of 720p60 is already about a
+	 * third of the SoC. It stays the default for that reason, but the
+	 * tier IS the device fingerprint, which is the one untried lever on
+	 * the coarse-text problem (KNOWN-ISSUES 1), so the options menu can
+	 * change it and find out. */
+	engine.set_realtime(g_opts.realtime);
+	engine.set_requested_video(g_opts.req_w, g_opts.req_h,
+				   g_opts.req_bitrate);
+	if (g_opts.alias)
+		engine.set_alias_override(g_opts.alias);
+	if (g_opts.osname || g_opts.display_w > 0)
+		engine.set_device_override(g_opts.osname ? g_opts.osname : "",
+					   g_opts.display_w, g_opts.display_h);
+	if (g_opts.sdp_max_fs > 0 || g_opts.sdp_max_mbps > 0 || g_opts.sdp_level)
+		engine.set_sdp_caps(g_opts.sdp_max_fs, g_opts.sdp_max_mbps,
+				    g_opts.sdp_level ? g_opts.sdp_level : "");
+	engine.start(request.target, request.id,
+		     (gnx::QualityTier)g_opts.tier, g_opts.locale);
+
+	run_session(out, f, p, engine, title);
+
 	/*
 	 * Did this title honour the size we asked for? Recorded per title so
 	 * the library can mark it: on this panel a native 640x360 stream is a
@@ -288,16 +327,11 @@ void stream_session(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,
 			note_native(request.id, w < 1280);
 	}
 
-	if (rt_set)
-		set_normal();
-	stop_input();
-	pipe.stop();
-	engine.stop();
+	/* After run_session(), so the engine is stopped and nothing is still
+	 * writing access units into the recorder. */
 	recorder.close();
 	if (wifi_applied)
 		wifi_tune_restore(&wifi);
-	if (video_mode)
-		drm_out_set_source(&out, kWidth, kHeight);
 }
 
 void stream_game(drm_out &out, Fonts &f, pad &p, gnx::XboxAuth &auth,

@@ -12,9 +12,9 @@ namespace app {
 /* Published for stream_session(); see app.hpp. */
 std::atomic<int> g_stream_w{0}, g_stream_h{0};
 
-gnx::xcloud::GamepadFrame pad_to_frame(const pad &p)
+gnx::stream::PadFrame pad_to_frame(const pad &p)
 {
-	gnx::xcloud::GamepadFrame f;
+	gnx::stream::PadFrame f;
 
 	/* PAD_A..PAD_Y already mean the Xbox function: evdev_pad's layout
 	 * (printed labels by default, see evdev_pad.h) did the translation. */
@@ -276,7 +276,7 @@ int prepare_frame(drm_out &out, const AVFrame *frame)
  * moves and the encoder has real motion to send, plus a tap of A every few
  * seconds to get through menus. Nothing about it is game-aware.
  */
-gnx::xcloud::GamepadFrame autoplay_frame(gnx::xcloud::GamepadFrame f)
+gnx::stream::PadFrame autoplay_frame(gnx::stream::PadFrame f)
 {
 	double t = now_ms() / 1000.0;
 	f.left_x = (float)(0.7 * std::sin(t * 2.0));
