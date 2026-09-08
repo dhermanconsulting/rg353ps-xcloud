@@ -20,7 +20,8 @@ account on anything. If you want to build from source instead, see
 This is the whole install. It takes about two minutes.
 
 1. **Download** the latest `xcloud-rg353ps-*.zip` from the
-   [Releases page](../../releases) and unzip it on your computer.
+   [Releases page](https://github.com/dhermanconsulting/rg353ps-xcloud/releases)
+   and unzip it on your computer.
 
 2. **Turn the handheld off** and take out the SD card that holds your ROMs.
    On a two-slot device that is the second slot — the card with folders like

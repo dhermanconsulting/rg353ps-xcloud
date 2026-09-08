@@ -1,5 +1,9 @@
 # xcloud-rg353ps
 
+[![Latest release](https://img.shields.io/github/v/release/dhermanconsulting/rg353ps-xcloud?include_prereleases&label=download&color=2ea44f)](https://github.com/dhermanconsulting/rg353ps-xcloud/releases/latest)
+[![CI](https://github.com/dhermanconsulting/rg353ps-xcloud/actions/workflows/ci.yml/badge.svg)](https://github.com/dhermanconsulting/rg353ps-xcloud/actions/workflows/ci.yml)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
 A native Xbox Cloud Gaming client for Anbernic RG353-series handhelds, running
 on the stock firmware. Sign in on the device, browse your Game Pass library,
 and stream — or connect to your own Xbox over remote play.
@@ -8,6 +12,12 @@ No browser, no Android, no PortMaster runtime — one self-contained binary
 that talks to Microsoft's streaming service directly, decodes H.264 in
 software, and puts frames on a DRM overlay plane at 60 fps. The download is
 about 8 MB.
+
+> ### ⬇ [Get the latest release](https://github.com/dhermanconsulting/rg353ps-xcloud/releases/latest)
+>
+> Unzip it, copy the `ports` folder onto your ROMs SD card, put the card back.
+> It appears under **Ports**. No terminal, no PortMaster, no account on
+> anything but Xbox — [full instructions](docs/INSTALL.md).
 
 > **Not affiliated with Microsoft or Anbernic.** "Xbox", "Xbox Game Pass" and
 > "Xbox Cloud Gaming" are trademarks of Microsoft Corporation; "Anbernic" is a
@@ -65,7 +75,8 @@ from the network.
 ## Install
 
 **No terminal needed.** Download the latest zip from the
-[Releases page](../../releases), unzip it, and copy the `ports` folder onto
+[Releases page](https://github.com/dhermanconsulting/rg353ps-xcloud/releases),
+unzip it, and copy the `ports` folder onto
 your ROMs SD card so it merges with the `ports` folder already there. Put the
 card back — it appears under **Ports**.
 
@@ -79,8 +90,8 @@ Sign-in happens on the handheld: it shows a code, you enter it at
 ### From source
 
 ```bash
-git clone <repository-url> xcloud-rg353ps
-cd xcloud-rg353ps
+git clone https://github.com/dhermanconsulting/rg353ps-xcloud.git
+cd rg353ps-xcloud
 sh scripts/bootstrap.sh        # toolchain images, dependencies, the client
 sh scripts/setup-device.sh     # asks for your handheld's address, verifies it
 sh scripts/install.sh          # installs onto the handheld over the network
