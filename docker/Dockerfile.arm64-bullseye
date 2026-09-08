@@ -9,12 +9,11 @@
 # and libavcodec.so.58.91.100 exactly, so we can build against these headers
 # and link dynamically against the device's own libraries at runtime.
 #
-# Bullseye left LTS on 2026-08-31 and is mid-transition to archive.debian.org:
-# deb.debian.org still serves the indexes but some pool files already 404. If
-# more packages start failing, switch to the pinned snapshot the base image
-# ships commented out:
-#   deb http://snapshot.debian.org/archive/debian/20260824T000000Z bullseye main
-#   deb http://snapshot.debian.org/archive/debian-security/20260824T000000Z bullseye-security main
+# Bullseye left LTS on 2026-08-31 and deb.debian.org's security pool has begun
+# dropping superseded files, so the default sources now 404 mid-install on a
+# clean machine. Security is therefore pinned to snapshot.debian.org, the same
+# timestamp the other two images use; main and -updates are still fine live.
+# The snapshot throttles, hence Acquire::Retries.
 #
 # Deliberately NO libsdl2-dev: it drags in libgl1-mesa-dev, which currently
 # 404s, and we do not need it. The design uses direct libdrm for video, raw
@@ -27,7 +26,13 @@
 #   docker run --privileged --rm tonistiigi/binfmt --install arm64
 FROM --platform=linux/arm64 debian:bullseye
 
-RUN apt-get update \
+RUN printf 'deb http://deb.debian.org/debian bullseye main\n\
+deb http://snapshot.debian.org/archive/debian-security/20260824T000000Z bullseye-security main\n\
+deb http://deb.debian.org/debian bullseye-updates main\n' \
+      > /etc/apt/sources.list \
+ && printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "5";\n' \
+      > /etc/apt/apt.conf.d/99no-check-valid-until \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential pkg-config cmake ninja-build git ca-certificates curl \
       python3 file patchelf \

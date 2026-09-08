@@ -17,6 +17,8 @@ cd "$(dirname "$0")/.."
 ENV_FILE=${DEVICE_ENV:-device.env}
 
 # Load what is already there so the prompts can offer it back.
+# The path is the caller's, so there is nothing for ShellCheck to follow.
+# shellcheck source=/dev/null
 [ -f "$ENV_FILE" ] && . "./$ENV_FILE"
 
 ask() {  # ask <prompt> <default> -> answer on stdout

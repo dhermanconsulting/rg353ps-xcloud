@@ -79,6 +79,10 @@ jobs:
             ${{ steps.package.outputs.zip }}
             out/SHA256SUMS.txt
           generate_release_notes: true
+          # A tag with a suffix -- v1.0.0-rc1, v1.1.0-beta2 -- is a candidate,
+          # not the download to point people at. Marking it a prerelease keeps
+          # GitHub showing the last plain vX.Y.Z as "Latest".
+          prerelease: ${{ contains(github.ref_name, '-') }}
           body: |
             ## Install
 

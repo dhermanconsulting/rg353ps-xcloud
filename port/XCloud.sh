@@ -63,7 +63,8 @@ export HOME="$STATE"
 export XDG_CONFIG_HOME="$STATE/config"
 export XDG_DATA_HOME="$STATE/data"
 export XDG_CACHE_HOME="$STATE/cache"
-export LD_LIBRARY_PATH="$STATE/libs:$(dirname "$BIN")/libs:$LD_LIBRARY_PATH"
+BINDIR=$(dirname "$BIN")
+export LD_LIBRARY_PATH="$STATE/libs:$BINDIR/libs:$LD_LIBRARY_PATH"
 mkdir -p "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 
 # Register the port's name and description in EmulationStation's gamelist, so

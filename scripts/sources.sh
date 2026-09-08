@@ -6,6 +6,10 @@
 # The DRM output is deliberately not here. The device links
 # src/video/drm_output.c and the host links src/video/drm_output_sim.c; each
 # build script names its own in front of XCLOUD_C_SOURCES.
+# Not executed, so no shebang: tell ShellCheck which shell to assume, and that
+# the lists below are read by whoever sources this, not by this file.
+# shellcheck shell=sh
+# shellcheck disable=SC2034
 CORE=src/gnx
 
 XCLOUD_C_SOURCES="src/video/nv12.c src/ui/text.c src/ui/screen.c \

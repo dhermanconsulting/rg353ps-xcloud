@@ -62,7 +62,7 @@ if [ "$1" = "--inside" ]; then
     while [ $# -gt 0 ] && [ "$1" != "--" ]; do cflags="$cflags $1"; shift; done
     [ "$1" = "--" ] && shift
     echo "=== [$name] configure"
-    rm -rf "$dir/$BUILD"
+    rm -rf "${dir:?}/${BUILD:?}"
     CFLAGS="$ARCH $cflags" cmake -S "$dir" -B "$dir/$BUILD" \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX="$PREFIX" \
@@ -158,7 +158,7 @@ for sub in mbedtls usrsctp libsrtp; do
     echo "third_party/libpeer/third_party/$sub is missing" >&2; exit 1; }
 done
 
-rm -rf "$DEPS/$TARGET"
+rm -rf "${DEPS:?}/${TARGET:?}"
 SRCWIN=$(cd "$ROOT" && (pwd -W 2>/dev/null || pwd))
 # An empty XCLOUD_DEPS_ARCH reads as unset inside (${VAR:-default}), so the
 # device flags still apply when the caller did not give any.

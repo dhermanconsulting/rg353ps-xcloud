@@ -86,6 +86,12 @@ Three traps, all of which `bootstrap.sh` handles for you:
   mid-transition to `archive.debian.org` and some pool files 404; SDL pulled in
   `libgl1-mesa-dev`, and nothing here needs it — video is direct libdrm, input
   is raw evdev, audio is ALSA.
+- **All three images pin `bullseye-security` to a `snapshot.debian.org`
+  timestamp.** Bullseye left LTS on 2026-08-31 and the live security pool has
+  begun dropping superseded files, so an unpinned build fails partway through
+  `apt-get install` with a 404 on a package the index still lists. If a *main*
+  package starts 404ing too, move that line to the same snapshot; each
+  Dockerfile carries the reasoning.
 
 ## Versioning
 

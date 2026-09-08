@@ -51,7 +51,7 @@
 # Two things the simulator logs that are NOT failures: SCHED_FIFO is
 # refused in the container (-nort keeps that quiet), and ALSA's null device
 # reports alsa=0-0ms with the audio servo at adj<0 throughout.
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 QUICK=0
 for a in "$@"; do
@@ -221,6 +221,8 @@ check_clean() {
 	# Every audio| line: fail must be 0 and under at most 2. One awk pass
 	# reports how many lines there were, how many broke each rule, and the
 	# worst under= seen.
+	# awk prints three numbers; splitting them into $1 $2 $3 is the point.
+	# shellcheck disable=SC2046
 	set -- $(grep -F 'audio|' "$log" | awk '{
 		f = -1; u = -1
 		for (i = 1; i <= NF; i++) {
@@ -328,7 +330,7 @@ check_ui() {
 	sim ui 40 -nort -quit-after 30 -fake-catalog 60 -fake-consoles 1 		-ui-script "wait:500,right,wait:300,A,wait:300,B,wait:300,right,wait:300,down,down,R1,wait:300,quit"
 	rc=$?
 	SIM_SHOTS=""
-	n=$(ls "$SHOTS" 2>/dev/null | grep -c -F .png)
+	n=$(find "$SHOTS" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')
 	# drm-sim: is the simulated panel's first line; without it the client
 	# never started (no binary, no image, no Docker), which is the bench's
 	# failure, not a screen that is not there yet.

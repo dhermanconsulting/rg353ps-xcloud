@@ -14,9 +14,18 @@
 #     binfmt registration is needed and this image works even after the
 #     Docker VM restarts and drops the arm64 handler.
 #
-# Sources stay on deb.debian.org, matching the arm64 image. archive.debian.org
-# looks like the "correct" home for a post-LTS release but its
-# debian-security/bullseye-security Release file 404s, which fails the build.
+# main and -updates stay on deb.debian.org. Security is pinned to
+# snapshot.debian.org, the same timestamp Dockerfile.host-bullseye uses:
+# bullseye left LTS on 2026-08-31 and deb.debian.org's security pool has
+# started dropping superseded files, so a fresh build 404s on whatever the
+# indexes still name. Seen 2026-09-08 on a clean GitHub runner:
+#
+#   E: Failed to fetch .../libperl5.32_5.32.1-4+deb11u5_amd64.deb  404
+#
+# archive.debian.org is the other candidate and remains unusable: its
+# debian-security/bullseye-security Release file 404s outright. The snapshot
+# carries every pool file the indexes name, and exactly the libc6/perl-base
+# versions the base image already has. It throttles, hence Acquire::Retries.
 #
 # One entry lists BOTH architectures rather than a pair of arch-pinned lines:
 # two lines pointing at the same suite make apt fetch main/binary-all twice and
@@ -24,10 +33,11 @@
 FROM --platform=linux/amd64 debian:bullseye
 
 RUN printf 'deb [arch=amd64,arm64] http://deb.debian.org/debian bullseye main\n\
-deb [arch=amd64,arm64] http://deb.debian.org/debian-security bullseye-security main\n\
+deb [arch=amd64,arm64] http://snapshot.debian.org/archive/debian-security/20260824T000000Z bullseye-security main\n\
 deb [arch=amd64,arm64] http://deb.debian.org/debian bullseye-updates main\n' \
       > /etc/apt/sources.list \
- && printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid-until \
+ && printf 'Acquire::Check-Valid-Until "false";\nAcquire::Retries "5";\n' \
+      > /etc/apt/apt.conf.d/99no-check-valid-until \
  && dpkg --add-architecture arm64 \
  && apt-get update \
  && apt-get install -y --no-install-recommends \

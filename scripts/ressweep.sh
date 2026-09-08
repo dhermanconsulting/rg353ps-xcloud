@@ -28,6 +28,9 @@ mkdir -p "$LOGDIR"
 
 if [ "$1" = "-f" ]; then
 	[ -f "$2" ] || { echo "ressweep: no such file: $2" >&2; exit 2; }
+	# The file lists title IDs; splitting them into separate arguments is
+	# exactly what this line is for.
+	# shellcheck disable=SC2046
 	set -- $(grep -v '^[[:space:]]*#' "$2" | tr -s ' \t\n' ' ')
 fi
 [ $# -gt 0 ] || { echo "usage: ressweep.sh TITLEID [...] | -f file" >&2; exit 2; }

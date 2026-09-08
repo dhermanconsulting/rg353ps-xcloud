@@ -64,6 +64,8 @@ if [ -n "$DEVICE_ENV" ] && [ -f "$DEVICE_ENV" ]; then
 	_env_host=$DEVICE_HOST; _env_user=$DEVICE_USER; _env_pw=$DEVICE_PW
 	_env_key=$DEVICE_KEY;   _env_hostkey=$DEVICE_HOSTKEY
 	_env_plink=$DEVICE_PLINK; _env_transport=$DEVICE_TRANSPORT
+	# The path is the caller's, so there is nothing for ShellCheck to follow.
+	# shellcheck source=/dev/null
 	. "$DEVICE_ENV"
 	[ -n "$_env_host" ]      && DEVICE_HOST=$_env_host
 	[ -n "$_env_user" ]      && DEVICE_USER=$_env_user
