@@ -71,6 +71,19 @@ struct pad {
 
 	/* Last virtual state applied (pad_virtual_set), for edge detection. */
 	uint32_t vmask;
+
+	/*
+	 * The last EV_KEY the driver actually sent, before any mapping.
+	 *
+	 * Kept for the button tester (Tools tab), which exists because the
+	 * step from a physical button to a Linux code is the one part of the
+	 * chain nobody has measured on this hardware -- the X/Y wiring rests
+	 * on the device tree, unpressed (KNOWN-ISSUES 5). Everything after
+	 * it is deterministic; this is what lets someone check the bit that
+	 * is not. 0 = nothing pressed yet.
+	 */
+	int last_code;
+	int last_value;
 };
 
 /*
@@ -122,6 +135,14 @@ int pad_now_ms(void);
 
 /* Name for logging. */
 const char *pad_button_name(enum pad_button b);
+
+/*
+ * The kernel's name for a raw EV_KEY code ("BTN_SOUTH"), for the button
+ * tester. Returns NULL for a code this pad does not know, which is itself
+ * worth showing: a button that reports something unexpected is exactly what
+ * the tester is looking for.
+ */
+const char *pad_evdev_name(int code);
 
 /*
  * The letter PRINTED on the shell for an Xbox function, for on-screen button

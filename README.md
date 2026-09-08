@@ -31,7 +31,8 @@ about 8 MB.
 | | |
 |---|---|
 | **Sign in** | Microsoft device-code flow, on the handheld. Token cached locally. |
-| **Library** | Your Game Pass catalog with box art, search, sort, recently played. |
+| **Library** | Your Game Pass catalog with box art, search, sort, recently played, and an info panel per title. |
+| **Tools** | A button tester drawn as a controller, showing the raw code each button reports and what it maps to; and a network test — latency and jitter to Xbox Live, download and upload, Wi-Fi signal — that says which stream quality your link will hold. |
 | **Streaming** | 60 fps at 720p with sound, over WebRTC. |
 | **Remote play** | Your own Xbox instead of the cloud — lower latency, and not metered against Game Pass hours. Cold consoles are woken automatically. |
 | **Input** | Raw evdev gamepad, configurable face-button layout. |
@@ -49,7 +50,9 @@ a third of a 16.6 ms frame budget. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md
 ### Known limits
 
 - **Text is coarse in some games.** The panel is 640x480 and the service
-  encodes at 1280x720, so the picture is halved. Some titles honour a
+  encodes at 1280x720, so the picture is halved. The halving is done on the
+  CPU by default, which costs about a millisecond a frame and keeps
+  one-pixel strokes the display controller would drop. Some titles honour a
   client-requested 640x360 and look native; most ignore it.
   [docs/RESOLUTION.md](docs/RESOLUTION.md) has the full matrix.
 - **Hardware video decode does not work on the stock firmware**, and this is
@@ -119,8 +122,12 @@ in a browser anywhere; the handheld picks up the token and caches it.
 | Control | Does |
 |---|---|
 | **D-pad / sticks** | Navigate |
+| **Up**, from the top of a list | Move the highlight up to the tabs, and to the letter or page strip under them. Left/Right move along whichever strip is lit; Down goes back into the list |
+| **L1 / R1** | Cycle the tabs from anywhere — Home, All Games, Genres, Settings |
+| **L2 / R2** | Page up and down a long list |
 | **A** | Select |
 | **B** | Back |
+| **X** (on a title) | Info: how you can play it, genre, year, rating, and whether it encodes at 640x360 |
 | **START** (in library) | Settings |
 | **SELECT + X** (in a stream) | Options overlay |
 | **SELECT + START** | Quit |

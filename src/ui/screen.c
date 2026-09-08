@@ -56,6 +56,59 @@ void screen_rect_colour(uint8_t *luma, uint8_t *chroma, int pitch, int w,
 	}
 }
 
+/*
+ * A filled disc, for the button tester's controller.
+ *
+ * Round things need a primitive of their own here: a pad drawn out of
+ * rectangles does not read as a pad, and the whole value of that screen is
+ * being recognisable at a glance while you press things.
+ *
+ * Scanline fill: for each row, the widest half-width whose square still fits
+ * inside the radius. Integer arithmetic on purpose -- this file links against
+ * no maths library and is not about to start for one shape. No anti-aliasing
+ * either: at these radii on a 640x480 panel it is not worth the cost, and
+ * every other shape on this screen has hard edges too.
+ *
+ * `chroma` may be NULL for a plain luma disc; pass it with cb/cr to tint one.
+ */
+void screen_disc(uint8_t *luma, uint8_t *chroma, int pitch, int w, int h,
+		 int cx, int cy, int r, uint8_t Y, uint8_t cb, uint8_t cr)
+{
+	if (r <= 0)
+		return;
+	for (int dy = -r; dy <= r; dy++) {
+		int y = cy + dy;
+		int room = r * r - dy * dy;
+		int half = 0;
+		int x0, x1;
+
+		while ((half + 1) * (half + 1) <= room)
+			half++;
+		x0 = cx - half;
+		x1 = cx + half;
+
+		if (y < 0 || y >= h)
+			continue;
+		if (x0 < 0)
+			x0 = 0;
+		if (x1 >= w)
+			x1 = w - 1;
+		if (x1 < x0)
+			continue;
+		memset(luma + (size_t)y * pitch + x0, Y, (size_t)(x1 - x0 + 1));
+		/* Chroma is half resolution: write on even rows only, in
+		 * cb/cr pairs, the same whole-block rule as a filled rect. */
+		if (chroma && !(y & 1)) {
+			uint8_t *dst = chroma + (size_t)(y / 2) * pitch;
+
+			for (int i = x0 & ~1; i <= x1; i += 2) {
+				dst[i] = cb;
+				dst[i + 1] = cr;
+			}
+		}
+	}
+}
+
 void screen_frame(uint8_t *luma, int pitch, int w, int h, int x, int y,
 		  int rw, int rh, int t, uint8_t level)
 {

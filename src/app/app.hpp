@@ -55,6 +55,26 @@ constexpr int kHeight = 480;
 extern volatile sig_atomic_t g_stop;
 extern std::atomic<bool> g_abort;
 
+/*
+ * The build string: `git describe` at build time, or "dev" outside a
+ * checkout. Printed at startup, by -version, and shown in the corner of the
+ * library, because "is the handheld actually running the thing I just sent
+ * it" is otherwise unanswerable with the device in your hands.
+ *
+ * A variable defined in main.cpp, deliberately, rather than the
+ * XCLOUD_VERSION macro used directly. Only main.cpp is compiled with
+ * -DXCLOUD_VERSION and only main.cpp is rebuilt unconditionally; the build's
+ * staleness check compares timestamps, not flags, so a second translation
+ * unit reading the macro would bake in whatever the version was the last
+ * time that particular file happened to change, and then confidently
+ * display it. A version string that lies is worse than none.
+ */
+extern const char *const g_version;
+/* __TIME__ from that same always-rebuilt file, "HH:MM:SS". What the library
+ * shows for a working build, because every one of those carries the SAME
+ * describe string and so cannot answer "is this the binary I just sent". */
+extern const char *const g_build_time;
+
 struct Fonts {
 	text_ctx *big = nullptr;
 	text_ctx *mid = nullptr;
@@ -124,6 +144,31 @@ public:
 			      level, max_w);
 	}
 
+	void disc(int cx, int cy, int r, uint8_t level)
+	{
+		screen_disc(b_->luma, nullptr, b_->pitch, kWidth, kHeight, cx,
+			    cy, r, level, 0, 0);
+	}
+
+	/* A disc in the selection green -- a pressed button on the tester's
+	 * controller, marked the same way a chosen row is. */
+	void sel_disc(int cx, int cy, int r)
+	{
+		uint8_t Y, cb, cr;
+
+		screen_rgb_to_ycc(34, 132, 78, &Y, &cb, &cr);
+		screen_disc(b_->luma, b_->chroma, b_->pitch, kWidth, kHeight,
+			    cx, cy, r, Y, cb, cr);
+	}
+
+	/* A string slid through a fixed window; see text_draw_window. */
+	void line_window(text_ctx *font, int x, int y, const char *s,
+			 uint8_t level, int win_x, int win_w)
+	{
+		text_draw_window(font, b_->luma, b_->pitch, kWidth, kHeight, x,
+				 y, s, level, win_x, win_w);
+	}
+
 	void frame(int x, int y, int w, int h, int t, uint8_t level)
 	{
 		screen_frame(b_->luma, b_->pitch, kWidth, kHeight, x, y, w, h, t,
@@ -135,6 +180,25 @@ public:
 	{
 		screen_rect_colour(b_->luma, b_->chroma, b_->pitch, kWidth,
 				   kHeight, x, y, w, h, Y, cb, cr);
+	}
+
+	/*
+	 * THE selection bar -- there is one on the screen and it moves.
+	 *
+	 * A dark green, so it reads as "chosen" rather than as a grey band
+	 * whatever it covers is sitting on. Every band that can hold the
+	 * cursor paints it with this, tab strip included: the first attempt
+	 * gave the strips a grey block of their own and left a dimmed green
+	 * bar down in the list, which showed two things at once and so
+	 * showed neither. Pressing Up should move a highlight, not trade one
+	 * kind of marking for another.
+	 */
+	void sel_rect(int x, int y, int w, int h)
+	{
+		uint8_t Y, cb, cr;
+
+		screen_rgb_to_ycc(18, 74, 44, &Y, &cb, &cr);
+		rect_colour(x, y, w, h, Y, cb, cr);
 	}
 
 	/* An NV12 image with its colour (box art); see screen_blit_nv12. */
@@ -335,8 +399,14 @@ struct StreamOptions {
 	 * Atomic because the options overlay changes it from the input
 	 * thread while the present thread is reading it every frame -- which
 	 * is the whole point of being able to change it mid-stream.
+	 *
+	 * `sharp` is the default since 2026-09-08, decided the only way it
+	 * could be: by looking at the panel. It costs 1.2 ms of a 16.58 ms
+	 * budget with `late=0` (KNOWN-ISSUES 1), which is a cheap price for
+	 * glyph stems that survive the halving instead of vanishing by
+	 * parity. `hw` is still there for anyone who wants the millisecond.
 	 */
-	std::atomic<int> scale{NV12_SCALE_HW};
+	std::atomic<int> scale{NV12_SCALE_SHARP};
 	/*
 	 * -res <w>x<h>: the encode size to ask xCloud for, via the
 	 * clientdevicecapabilities and dimensionschanged messages, which

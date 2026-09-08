@@ -29,6 +29,14 @@ void screen_rect_colour(uint8_t *luma, uint8_t *chroma, int pitch, int w,
 			uint8_t cb, uint8_t cr);
 
 /* Rectangle outline `t` pixels thick, in luma only. */
+/*
+ * A filled disc. `chroma` may be NULL for plain luma; pass it with cb/cr to
+ * tint one. For the button tester's controller, where rectangles alone do not
+ * read as a gamepad.
+ */
+void screen_disc(uint8_t *luma, uint8_t *chroma, int pitch, int w, int h,
+		 int cx, int cy, int r, uint8_t Y, uint8_t cb, uint8_t cr);
+
 void screen_frame(uint8_t *luma, int pitch, int w, int h, int x, int y,
 		  int rw, int rh, int t, uint8_t level);
 

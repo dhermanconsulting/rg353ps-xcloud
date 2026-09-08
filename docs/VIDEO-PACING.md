@@ -374,7 +374,11 @@ gets a 640x360 source and a 640x360 destination and scales nothing at all.
 It also writes a quarter as many bytes into the write-combine mapping,
 which is where the old full-size copy spent its time.
 
-**Default is `hw`, unchanged, until a device A/B says otherwise.**
+**Default is `sharp` since 2026-09-08.** It was `hw` while the choice was
+still a table of arithmetic; the device A/B settled it on the panel, which
+is the only place it could be settled. The 1.2 ms it costs is measured
+below, and buys glyph stems that survive the halving. `hw` and `box` are
+still there, on the command line and in the options menu.
 
 ### What is verified, and what is not
 

@@ -253,8 +253,14 @@ int text_measure(struct text_ctx *t, const char *s)
  * and screen_rect give us. `lut` maps coverage to luma for the caller's
  * level, built once per string rather than divided per pixel.
  */
-static void blit_glyph(const struct glyph *g, uint8_t *luma, int pitch, int w,
-		       int h, int x0, int y0, const uint8_t *lut)
+/*
+ * cx0/cx1 are the horizontal bounds to paint within, already clamped to the
+ * plane by the caller. Normally they ARE the plane; text_draw_window narrows
+ * them so a string can be slid through a window without spilling out of it.
+ */
+static void blit_glyph(const struct glyph *g, uint8_t *luma, int pitch,
+		       int h, int x0, int y0, int cx0, int cx1,
+		       const uint8_t *lut)
 {
 	for (unsigned row = 0; row < g->rows; row++) {
 		int y = y0 + (int)row;
@@ -269,7 +275,7 @@ static void blit_glyph(const struct glyph *g, uint8_t *luma, int pitch, int w,
 			int x = x0 + (int)col;
 			unsigned cov = src[col];
 
-			if (x < 0 || x >= w || !cov)
+			if (x < cx0 || x >= cx1 || !cov)
 				continue;
 			dst[x] = lut[cov];
 		}
@@ -284,12 +290,17 @@ static void build_lut(uint8_t *lut, uint8_t level)
 }
 
 /* Draw the first `len` bytes of s (all of it if len is SIZE_MAX). */
-static int draw_n(struct text_ctx *t, uint8_t *luma, int pitch, int w, int h,
-		  int x, int y, const char *s, size_t len, uint8_t level)
+static int draw_n_clip(struct text_ctx *t, uint8_t *luma, int pitch, int w,
+		       int h, int x, int y, const char *s, size_t len,
+		       uint8_t level, int cx0, int cx1)
 {
 	const char *end = len == (size_t)-1 ? NULL : s + len;
 	uint8_t lut[256];
 
+	if (cx0 < 0)
+		cx0 = 0;
+	if (cx1 > w)
+		cx1 = w;
 	build_lut(lut, level);
 	while (*s && (!end || s < end)) {
 		const struct glyph *g = lookup(t, text_utf8_next(&s));
@@ -297,11 +308,17 @@ static int draw_n(struct text_ctx *t, uint8_t *luma, int pitch, int w, int h,
 		if (!g)
 			continue;
 		if (g->bitmap)
-			blit_glyph(g, luma, pitch, w, h, x + g->left,
-				   y - g->top, lut);
+			blit_glyph(g, luma, pitch, h, x + g->left,
+				   y - g->top, cx0, cx1, lut);
 		x += g->advance;
 	}
 	return x;
+}
+
+static int draw_n(struct text_ctx *t, uint8_t *luma, int pitch, int w, int h,
+		  int x, int y, const char *s, size_t len, uint8_t level)
+{
+	return draw_n_clip(t, luma, pitch, w, h, x, y, s, len, level, 0, w);
 }
 
 int text_draw(struct text_ctx *t, uint8_t *luma, int pitch, int w, int h,
@@ -353,6 +370,16 @@ int text_draw_fit(struct text_ctx *t, uint8_t *luma, int pitch, int w, int h,
 		keep--;
 	x = draw_n(t, luma, pitch, w, h, x, y, s, keep, level);
 	return text_draw(t, luma, pitch, w, h, x, y, ellipsis, level);
+}
+
+int text_draw_window(struct text_ctx *t, uint8_t *luma, int pitch, int w,
+		     int h, int x, int y, const char *s, uint8_t level,
+		     int win_x, int win_w)
+{
+	if (!t || !s || !luma)
+		return x;
+	return draw_n_clip(t, luma, pitch, w, h, x, y, s, (size_t)-1, level,
+			   win_x, win_x + win_w);
 }
 
 size_t text_break(struct text_ctx *t, const char *s, int max_w)

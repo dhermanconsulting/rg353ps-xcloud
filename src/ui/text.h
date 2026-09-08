@@ -60,6 +60,18 @@ int text_draw_fit(struct text_ctx *t, uint8_t *luma, int pitch, int w, int h,
 		  int x, int y, const char *s, uint8_t level, int max_w);
 
 /*
+ * Draw at (x, y) but paint only the pixels inside [win_x, win_x + win_w).
+ *
+ * For the marquee on a title too long for its row: the caller passes an x to
+ * the left of the window so the string slides through it, and nothing spills
+ * over the box art beside it or the counter after it. text_draw's own
+ * clipping is the whole plane, which is not the same thing.
+ */
+int text_draw_window(struct text_ctx *t, uint8_t *luma, int pitch, int w,
+		     int h, int x, int y, const char *s, uint8_t level,
+		     int win_x, int win_w);
+
+/*
  * Word wrap: the number of bytes at the start of `s` that fit in `max_w`,
  * cut at the last space that fits, or mid-word if the first word alone does
  * not fit (never zero for a non-empty string). Callers draw that prefix,

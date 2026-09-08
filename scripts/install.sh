@@ -15,7 +15,11 @@
 #
 # What lands where:
 #
-#   /userdata/ports/xcloud/xcloud       the binary (out/xcloud)
+#   /userdata/ports/xcloud/xcloud       the binary (out/xcloud), UNLESS a
+#                                       card install is already there, in
+#                                       which case /userdata/roms/ports/
+#                                       xcloud/xcloud, because that is the
+#                                       one the launcher runs -- see below
 #   /userdata/roms/ports/Xbox Cloud.sh  the ES launcher (port/XCloud.sh)
 #   /userdata/roms/ports/gamelist.xml   MERGED, never overwritten
 #
@@ -63,8 +67,25 @@ mkdir -p "$TMP"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "install: target $(device_target)" >&2
-device_run "mkdir -p '$GAMEDIR' '$PORTS'" \
+device_run "mkdir -p '$PORTS'" \
 	|| give_up "cannot reach $(device_target)"
+
+# ---- where the LAUNCHER will actually look -------------------------------
+# port/XCloud.sh searches "$HERE/xcloud/xcloud" -- beside itself, the SD-card
+# layout scripts/package.sh produces -- BEFORE /userdata/ports/xcloud/xcloud.
+# So a device that has ever had a card install shadows this one, and pushing
+# to the internal path alone is an install that changes nothing you can see.
+#
+# That is not hypothetical: it cost a whole round of "is this even the new
+# version" on 2026-09-08, with three pushes verified by md5 against a binary
+# the launcher was never going to run. Install where the launcher looks
+# first, and say which path was used, every time.
+if device_run "[ -f '$PORTS/xcloud/xcloud' ]" 2>/dev/null; then
+	GAMEDIR=$PORTS/xcloud
+	echo "install: SD-card layout found -- installing to $GAMEDIR/xcloud," >&2
+	echo "install: which the launcher prefers over /userdata/ports/xcloud." >&2
+fi
+device_run "mkdir -p '$GAMEDIR'" || give_up "cannot create $GAMEDIR"
 
 # ---- binary and launcher -------------------------------------------------
 sh scripts/push.sh "$BIN" "$GAMEDIR/xcloud" >&2

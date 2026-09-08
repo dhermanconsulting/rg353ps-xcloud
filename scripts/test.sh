@@ -324,10 +324,16 @@ check_ui() {
 	mkdir -p "$SHOTS"
 	note "ui: -fake-catalog 60 with a scripted walk of the library (up to 30 s) ..."
 	SIM_SHOTS=$SHOTS
-	# Walks the tabs, steps into a genre and back out, then scrolls the
-	# full list. The tab strip is the screen's navigation now, so a script
-	# that only moved down a flat list stopped covering most of it.
-	sim ui 40 -nort -quit-after 30 -fake-catalog 60 -fake-consoles 1 		-ui-script "wait:500,right,wait:300,A,wait:300,B,wait:300,right,wait:300,down,down,R1,wait:300,quit"
+	# Walks all three bands the D-pad can be in, because since the focus
+	# model went in that is where the screen's state lives: Up out of the
+	# list to the tabs, Left/Right along them, Down back in. Then a genre
+	# entered with Right and left with B, the letter strip, the info panel
+	# on X, the shoulders cycling the tab, and the button tester opened
+	# and held-B out of. A script that only moved down a flat list would
+	# now miss every gesture that changes what is showing -- and the two
+	# modal screens (tester, info) have their own input loops, so nothing
+	# else covers them at all.
+	sim ui 40 -nort -quit-after 30 -fake-catalog 60 -fake-consoles 1 		-ui-script "wait:500,up,wait:300,right,wait:300,right,wait:300,down,wait:300,right,wait:500,B,wait:300,up,wait:300,left,wait:300,down,wait:300,right,wait:300,down,wait:300,X,wait:700,B,wait:400,R1,wait:300,R1,wait:300,R1,wait:600,A,wait:700,hold:B:1100,wait:400,quit"
 	rc=$?
 	SIM_SHOTS=""
 	n=$(find "$SHOTS" -maxdepth 1 -name '*.png' 2>/dev/null | wc -l | tr -d ' ')

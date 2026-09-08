@@ -1,6 +1,6 @@
 # Known issues
 
-Status as of 2026-09-07.
+Status as of 2026-09-08.
 The pacing work is described in [VIDEO-PACING.md](VIDEO-PACING.md).
 
 ## Fixed since the last revision
@@ -164,8 +164,7 @@ the drop counters. On a weak signal this could trade sharper glyphs for
 dropped frames.
 
 So the levers now are: **720HQ** for encoder quality, and `-scale box|sharp`
-for the downscale itself. Both are in the options menu; `box` against `sharp`
-still needs eyes on the panel.
+for the downscale itself. Both are in the options menu.
 
 A second, cheaper thing to try first is the SDP offer's declared decode
 limit (`max-fs` in `third_party/libpeer/src/sdp.c`), though there is
@@ -173,9 +172,18 @@ already evidence against it: the same line declares `max-mbps=108000`,
 which is 720p**30**, and we receive 720p60 regardless. See
 docs/DEPENDENCIES.md, "Untried lever on the coarse-text problem".
 
-**Still open only because the default is unchanged (`hw`) pending a look at
-the panel**: box against sharp is a judgement on a 3.5" screen, not
-something the error table decides.
+**Settled 2026-09-08: the default is now `sharp`.** This was the last thing
+here that only a pair of eyes could decide -- box against sharp is a
+judgement on a 3.5" screen, not something the error table decides -- and
+sharp won on the panel. It costs 1.2 ms of a 16.58 ms budget with `late=0`
+and no dropped frames, which is a cheap price for glyph stems that survive
+the halving instead of vanishing by parity. `hw` and `box` remain in the
+options menu.
+
+Note for anyone whose handheld predates this: a saved `options.json` wins
+over the default, so a device that has ever used **Save changes** still runs
+whatever it saved. Set Downscale to sharp once, or use Reset all to
+defaults.
 
 ## 1b. The SD-card install: verified, with one gap
 
@@ -263,6 +271,15 @@ this is a judgement made with a thumb, and it used to be settable only from a
 command line the handheld does not have. The change applies to the open pad
 immediately and is saved, so the next launch keeps it. See
 the M7 notes (project notes).
+
+**There is now a tool that settles it: Tools -> Button tester** (2026-09-08).
+Everything from the Linux event code onwards is deterministic -- `face_map()`
+picks the Xbox button, the engine puts it in the pad packet -- and the only
+unmeasured step is which physical button emits which code. The tester shows
+both halves at once: the raw code the driver sent (`BTN_NORTH` and the
+number) and what this build made of it. Press the button marked A; if the
+"Acts as" line does not say A, that is the answer and "Face buttons" is the
+fix. Held B leaves, because every other button is under test.
 
 ## 6. Search cannot type non-Latin letters
 

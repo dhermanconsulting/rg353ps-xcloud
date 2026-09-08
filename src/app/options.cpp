@@ -126,7 +126,7 @@ const Opt kOpts[OPT_COUNT] = {
 	  "It has no effect while the picture is letterboxed." },
 	{ "scale", "Downscale",
 	  "Which method shrinks the picture to fit the display.",
-	  kScale, 3, true, GRP_STANDARD, 0,
+	  kScale, 3, true, GRP_STANDARD, 2,
 	  "The stream arrives larger than the display and has to be "
 	  "reduced.\n"
 	  "\n"
@@ -136,9 +136,10 @@ const Opt kOpts[OPT_COUNT] = {
 	  "\n"
 	  "Box and Sharp do the work on the processor instead and treat every "
 	  "pixel alike, at a cost of about a millisecond per frame. Sharp "
-	  "also adds a little edge definition.\n"
+	  "also adds a little edge definition, and is what this is set to.\n"
 	  "\n"
-	  "Try Box or Sharp if small text is hard to read." },
+	  "Try Hardware if you would rather have the millisecond back, or Box "
+	  "if Sharp's edges look overdone to you." },
 	{ "tier", "Stream quality",
 	  "Picture size and bitrate requested from the service.",
 	  kTier, 4, false, GRP_STANDARD, 0,
@@ -170,6 +171,14 @@ const Opt kOpts[OPT_COUNT] = {
 	  "Set it too high and the frame misses the refresh, and the previous "
 	  "one is shown again. Increase it a step at a time, and reduce it if "
 	  "the picture starts to stutter." },
+	/*
+	 * Defaults to declaring 640x360 -- the rectangle this panel actually
+	 * shows -- rather than the tier's 1280x720. Measured 2026-09-05: it
+	 * costs nothing on the titles that ignore it (same 720p, same
+	 * bitrate) and gets a native 640x360 encode out of the ones that have
+	 * adopted XGameStreamingSetResolution, which removes the downscale
+	 * altogether. Fortnite is one. docs/RESOLUTION.md.
+	 */
 	{ "size", "Preferred size",
 	  "The picture size this device asks games to render at.",
 	  kSize, 4, false, GRP_ADVANCED, 1,
@@ -476,30 +485,28 @@ void options_load()
 	std::ifstream in(path(), std::ios::binary);
 	json j = in ? json::parse(in, nullptr, false) : json();
 
+	/*
+	 * A key the file does not carry falls back to that setting's `def`,
+	 * which is the same value Reset stages and the same one the Explain
+	 * panel names as the default -- so there is exactly one place a
+	 * recommendation is written down.
+	 *
+	 * This used to fall back to 0 with three settings patched up
+	 * afterwards (wifi, rt and the 640x360 preferred size), which meant
+	 * `def` was only ever a hint to the reader: changing it moved what
+	 * Reset did and what the panel claimed, and left what a fresh install
+	 * actually ran with alone. Two of the three ways of saying "the
+	 * default" disagreeing with the third is a trap, and the Downscale
+	 * default walked into it the day it moved off hardware.
+	 *
+	 * Absence, not a reordering of the choice lists: a saved options.json
+	 * that meant something still means it.
+	 */
 	for (int i = 0; i < OPT_COUNT; i++) {
 		int v = j.is_object() ? j.value(kOpts[i].id, -1) : -1;
 
-		g_val[i] = v >= 0 && v < kOpts[i].n ? v : 0;
+		g_val[i] = v >= 0 && v < kOpts[i].n ? v : kOpts[i].def;
 	}
-	/* Defaults for anything the file did not carry: what the client did
-	 * before there was a menu. */
-	if (!j.is_object() || !j.contains("wifi"))
-		g_val[OPT_WIFI] = 1;
-	if (!j.is_object() || !j.contains("rt"))
-		g_val[OPT_RT] = 1;
-	/*
-	 * Default to declaring 640x360 -- the rectangle this panel actually
-	 * shows -- rather than the tier's 1280x720. Measured 2026-09-05: it
-	 * costs nothing on titles that ignore it (same 720p, same bitrate)
-	 * and gets a native 640x360 encode from titles that have adopted
-	 * XGameStreamingSetResolution, which removes the downscale entirely.
-	 * Fortnite is one. docs/RESOLUTION.md.
-	 *
-	 * Set by absence of the key rather than by reordering kSize, so a
-	 * saved options.json that meant "as sent" still means it.
-	 */
-	if (!j.is_object() || !j.contains("size"))
-		g_val[OPT_SIZE] = 1;  /* 640x360 */
 	apply();
 }
 
@@ -644,12 +651,19 @@ bool options_page_unsaved() { return page_dirty(); }
 
 bool options_page_explaining() { return g_page_detail; }
 
-/* The group the shoulders would take you TO, not the one you are on: a hint
- * that names where you already are is not a hint. */
-const char *options_page_other_group()
+/*
+ * The sub-tab strip, driven from the library: it owns Left/Right up there,
+ * because Left/Right anywhere else on this page cycle a value.
+ */
+void options_page_group_step(int dir)
 {
-	return kGroupName[(g_page_group + 1) % GRP_COUNT];
+	g_page_group = (OptGroup)((g_page_group + GRP_COUNT + dir) % GRP_COUNT);
+	g_page_row = 0;
 }
+
+bool options_page_at_top() { return g_page_row == 0; }
+
+void options_page_to_top() { g_page_row = 0; }
 
 /*
  * Returns true when the page wants to keep the press, false to let the caller
@@ -686,19 +700,13 @@ bool options_page_input(pad &p, int now)
 		return true;
 	}
 
-	/* Shoulders switch sub-tab, the same gesture the letter strip uses
-	 * for its groups: Left and Right are spoken for by the values here. */
-	int tab_step = 0;
-	if (pad_repeat(&p, PAD_R1, now))
-		tab_step = +1;
-	if (pad_repeat(&p, PAD_L1, now))
-		tab_step = -1;
-	if (tab_step) {
-		g_page_group = (OptGroup)((g_page_group + GRP_COUNT + tab_step) %
-					  GRP_COUNT);
-		g_page_row = 0;
-		return true;
-	}
+	/*
+	 * The shoulders are not ours. They cycle the primary tabs from
+	 * everywhere on this screen and mean nothing else anywhere, so the
+	 * library takes them before this is ever called; Standard against
+	 * Advanced is reached by going Up onto the strip, where Left and
+	 * Right are free because they are not editing a value up there.
+	 */
 
 	/*
 	 * Moving the cursor is a change like any other and has to be reported:
@@ -710,10 +718,18 @@ bool options_page_input(pad &p, int now)
 	 */
 	const int was_row = g_page_row;
 
-	if (pad_repeat(&p, PAD_DOWN, now))
-		g_page_row = (g_page_row + 1) % n;
-	if (pad_repeat(&p, PAD_UP, now))
-		g_page_row = (g_page_row + n - 1) % n;
+	/*
+	 * The ends stop rather than wrap. They used to wrap, which was fine
+	 * when this band was the only thing the D-pad could reach; now Up at
+	 * the first row is how the cursor gets back to the sub-tabs (the
+	 * library takes that press before we see it), and a Down that
+	 * wrapped round to the top while Up escaped would be a strip that
+	 * behaves differently at each end for no reason a thumb can feel.
+	 */
+	if (pad_repeat(&p, PAD_DOWN, now) && g_page_row < n - 1)
+		g_page_row++;
+	if (pad_repeat(&p, PAD_UP, now) && g_page_row > 0)
+		g_page_row--;
 	const bool moved = g_page_row != was_row;
 
 	const bool on_action = g_page_row >= (int)rows.size();
@@ -807,9 +823,11 @@ void draw_detail(Painter &pt, Fonts &f, int top, int bottom, int opt)
 	}
 }
 
-void options_page_draw(Painter &pt, Fonts &f, int top, int bottom)
+void options_page_draw(Painter &pt, Fonts &f, int top, int bottom,
+		       OptPageFocus focus)
 {
 	std::vector<int> rows = group_rows(g_page_group);
+	const bool body = focus == OPT_FOCUS_BODY;
 	const int lh = 30;
 	int y = top + 4;
 
@@ -818,15 +836,23 @@ void options_page_draw(Painter &pt, Fonts &f, int top, int bottom)
 		return;
 	}
 
-	/* Sub-tab strip. */
+	/*
+	 * Sub-tab strip. Brighter, and with a lit band behind the whole row,
+	 * while the cursor is on it: the highlight below has to be able to
+	 * go dim without the page looking like nothing at all is selected.
+	 */
+	if (focus == OPT_FOCUS_GROUP)
+		pt.rect(0, y - 2, kWidth, 26, 34);
 	for (int g = 0; g < GRP_COUNT; g++) {
 		const bool on = g == g_page_group;
 		const int x = 20 + g * 120;
 
-		if (on)
-			pt.rect(x - 10, y, 110, 22, 60);
+		if (on && focus == OPT_FOCUS_GROUP)
+			pt.sel_rect(x - 10, y, 110, 22);
+		else if (on)
+			pt.rect(x - 10, y, 110, 22, 44);
 		pt.line(f.small, x, y + 16, kGroupName[g],
-			on ? 235 : 120);
+			on ? (focus == OPT_FOCUS_GROUP ? 255 : 205) : 120);
 	}
 	pt.line(f.small, kWidth - 150, y + 16,
 		page_dirty() ? "Unsaved changes" : "", 200);
@@ -834,14 +860,21 @@ void options_page_draw(Painter &pt, Fonts &f, int top, int bottom)
 
 	for (size_t r = 0; r < rows.size(); r++) {
 		const int i = rows[r];
-		const bool on = (int)r == g_page_row;
+		/* The cursor stays where it was while it is parked on a strip
+		 * above, so you can see where Down will put you back -- but
+		 * it is drawn faint, because it is not what the D-pad moves
+		 * from up there. */
+		const bool sel = (int)r == g_page_row;
+		const bool on = sel && body;
 		const bool changed = g_edit[i] != kOpts[i].def;
 		const char *v = kOpts[i].choices[g_edit[i]];
 
 		if (y + lh > bottom)
 			break;
 		if (on)
-			pt.rect(6, y - 2, kWidth - 12, lh - 2, 58);
+			pt.sel_rect(6, y - 2, kWidth - 12, lh - 2);
+		else if (sel)
+			pt.rect(6, y - 2, kWidth - 12, lh - 2, 30);
 		pt.line(f.mid, 20, y + 20,
 			(std::string(kOpts[i].label) +
 			 (kOpts[i].live ? "" : " *")).c_str(),
@@ -855,12 +888,15 @@ void options_page_draw(Painter &pt, Fonts &f, int top, int bottom)
 	}
 
 	for (int a = 0; a < ACT_COUNT; a++) {
-		const bool on = g_page_row == (int)rows.size() + a;
+		const bool sel = g_page_row == (int)rows.size() + a;
+		const bool on = sel && body;
 
 		if (y + lh > bottom)
 			break;
 		if (on)
-			pt.rect(6, y - 2, kWidth - 12, lh - 2, 58);
+			pt.sel_rect(6, y - 2, kWidth - 12, lh - 2);
+		else if (sel)
+			pt.rect(6, y - 2, kWidth - 12, lh - 2, 30);
 		pt.line(f.mid, 20, y + 20, kActName[a],
 			on ? 245 : (a == ACT_SAVE && page_dirty() ? 215 : 150));
 		y += lh;

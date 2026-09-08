@@ -55,12 +55,31 @@ void options_menu_draw(drm_out &out, Fonts &f);
  * The library owns the chrome (header, primary tabs) and calls in for the
  * body; options.cpp owns the sub-tabs, the rows, the staging and the actions.
  */
+
+/*
+ * Which of the page's two bands the library has lit.
+ *
+ * The library owns the cursor's vertical position across the whole screen --
+ * primary tabs, then sub-tabs, then rows -- so the page cannot decide for
+ * itself which of its bands the D-pad is talking to; it has to be told. NONE
+ * means the cursor is up on the primary tabs and the whole page is inert but
+ * still drawn, so you can see what you are about to step into.
+ */
+enum OptPageFocus { OPT_FOCUS_NONE, OPT_FOCUS_GROUP, OPT_FOCUS_BODY };
+
 void options_page_enter();              /* stage from the committed values */
 bool options_page_unsaved();            /* something staged but not saved */
 bool options_page_explaining();         /* the Explain panel is open */
-const char *options_page_other_group(); /* where L1/R1 would go */
-/* True when the page consumed the press. */
+void options_page_group_step(int dir);  /* Standard <-> Advanced */
+bool options_page_at_top();             /* the cursor is on the first row */
+void options_page_to_top();             /* put it there */
+/*
+ * True when the page consumed the press. Called only while the rows have the
+ * cursor, and the library keeps Up at the first row for itself so the cursor
+ * can leave this band upwards.
+ */
 bool options_page_input(pad &p, int now);
-void options_page_draw(Painter &pt, Fonts &f, int top, int bottom);
+void options_page_draw(Painter &pt, Fonts &f, int top, int bottom,
+		       OptPageFocus focus);
 
 }  // namespace app

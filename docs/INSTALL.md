@@ -93,6 +93,24 @@ want if you sell or lose the device — remove the app at
 | **SELECT + X** (during a stream) | Options |
 | **SELECT + START** | Quit |
 
+The library is three rows deep. Press **Up** from the top of the list and the
+green highlight moves onto the tabs — Home, All Games, Genres, Settings,
+Tools — where Left and Right choose between them and Down takes you back into
+the list. All Games and Settings have a second strip under the tabs, the A–Z
+index and the Standard/Advanced pages, reached the same way. Whichever strip
+has the highlight is the one Left and Right are moving along.
+
+**L1 and R1 cycle the tabs** from anywhere, without going up first. **L2 and
+R2** page up and down through a long list. On a title, **X** opens an info
+panel; on a genre, **Right** steps into it. A title too long for its row
+scrolls once you have rested on it for a second.
+
+**Tools** holds two things. *Button tester* draws a controller and lights up
+whatever you press, alongside the raw code your device reported — useful if
+the face buttons feel wrong; hold **B** to leave it. *Network test* measures
+latency and jitter to Xbox Live, download and upload speed, and your Wi-Fi
+signal, then tells you whether the link will carry 720p or 720p high.
+
 Everything worth changing is in the on-device settings — stream quality,
 face-button layout, picture mode, console language, Wi-Fi tuning. You do not
 need a computer again after signing in.

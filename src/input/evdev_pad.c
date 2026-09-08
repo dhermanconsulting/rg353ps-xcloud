@@ -42,6 +42,28 @@ const char *pad_button_name(enum pad_button b)
 	return (b >= 0 && b < PAD_COUNT) ? k_names[b] : "?";
 }
 
+const char *pad_evdev_name(int code)
+{
+	static const struct { int code; const char *name; } names[] = {
+		{ BTN_SOUTH, "BTN_SOUTH" }, { BTN_EAST,  "BTN_EAST" },
+		{ BTN_NORTH, "BTN_NORTH" }, { BTN_WEST,  "BTN_WEST" },
+		{ BTN_TL,    "BTN_TL" },    { BTN_TR,    "BTN_TR" },
+		{ BTN_TL2,   "BTN_TL2" },   { BTN_TR2,   "BTN_TR2" },
+		{ BTN_SELECT, "BTN_SELECT" }, { BTN_START, "BTN_START" },
+		{ BTN_MODE,  "BTN_MODE" },
+		{ BTN_THUMBL, "BTN_THUMBL" }, { BTN_THUMBR, "BTN_THUMBR" },
+		{ BTN_DPAD_UP,   "BTN_DPAD_UP" },
+		{ BTN_DPAD_DOWN, "BTN_DPAD_DOWN" },
+		{ BTN_DPAD_LEFT, "BTN_DPAD_LEFT" },
+		{ BTN_DPAD_RIGHT, "BTN_DPAD_RIGHT" },
+	};
+
+	for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+		if (names[i].code == code)
+			return names[i].name;
+	return NULL;
+}
+
 const char *pad_button_label(const struct pad *p, enum pad_button b)
 {
 	/* Positional: bottom is PAD_A and the shell prints B there, and so
@@ -537,6 +559,12 @@ int pad_poll(struct pad *p, int timeout_ms)
 		if (ev.type == EV_KEY) {
 			enum pad_button face;
 
+			/* Before any mapping: what the driver actually said,
+			 * which is what the button tester reports. */
+			if (ev.value) {
+				p->last_code = ev.code;
+				p->last_value = ev.value;
+			}
 			if (face_map(p, ev.code, &face)) {
 				if (ev.value && !p->down[face])
 					p->pressed[face] = 1;

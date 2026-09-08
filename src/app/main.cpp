@@ -70,10 +70,17 @@ const char *arg_value(int argc, char **argv, const char *key)
  * alternative -- working out which of several pushes is actually on a
  * handheld -- is guesswork, and the log a user attaches to a bug report is
  * worth nothing without it.
+ *
+ * Only this file is compiled with -DXCLOUD_VERSION, and only this file is
+ * rebuilt every time; g_version is how the rest of the client reads it
+ * without risking a stale copy. See the note in app.hpp.
  */
 #ifndef XCLOUD_VERSION
 #define XCLOUD_VERSION "dev"
 #endif
+
+const char *const g_version = XCLOUD_VERSION;
+const char *const g_build_time = __TIME__;   /* "HH:MM:SS" */
 
 void print_version()
 {
